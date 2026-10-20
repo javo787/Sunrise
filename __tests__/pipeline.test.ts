@@ -1,6 +1,6 @@
 import { getDb } from "@/lib/mongodb";
 import { resetIndexCacheForTests, type Lead } from "@/lib/db/collections";
-import { getLead, markPublished } from "@/lib/db/leads";
+import { getLead, markPublished, type NewLeadInput } from "@/lib/db/leads";
 import { upsertManager } from "@/lib/db/managers";
 import {
   escalateStaleLeads,
@@ -36,7 +36,7 @@ beforeEach(async () => {
     sendDm: jest.fn(async (userId: number) => !noDm.has(userId)),
     sendGroupHtml: jest.fn(async () => undefined),
     sendTo: jest.fn(async () => undefined),
-  };
+  } as unknown as jest.Mocked<TelegramGateway>;
   syncSheet = jest.fn(async () => undefined);
   deps = { gateway, syncSheet, adminIds: [9000], escalationMinutes: 15 };
 
@@ -45,11 +45,11 @@ beforeEach(async () => {
   await upsertManager({ telegramId: 3, name: "Вали", sheetName: "Менеджер 3" });
 });
 
-const input = { name: "Алишер", phone: "+992 93 123 45 67", source: "Таргет Instagram", channel: "meta_form", qualification: { floor: 5, areaSqm: 45, paymentType: "installment_50" } } as const;
+const input: NewLeadInput = { name: "Алишер", phone: "+992 93 123 45 67", source: "Таргет Instagram", channel: "meta_form", qualification: { floor: 5, areaSqm: 45, paymentType: "installment_50" } };
 const T0 = new Date("2026-10-20T10:00:00Z");
 const minutes = (n: number) => new Date(T0.getTime() + n * 60_000);
 
-async function newLead(over: Partial<typeof input> = {}): Promise<Lead> {
+async function newLead(over: Partial<NewLeadInput> = {}): Promise<Lead> {
   const r = await registerLead(deps, { ...input, ...over });
   return r.lead;
 }

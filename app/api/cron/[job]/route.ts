@@ -1,6 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
-import { coreConfig } from "@/lib/config";
 import { isJobName, JOBS } from "@/lib/cron/jobs";
 import { createLogger } from "@/lib/logger";
 
@@ -17,7 +16,7 @@ function authorized(req: Request, secret: string): boolean {
 }
 
 async function run(req: Request, { params }: { params: { job: string } }) {
-  const secret = coreConfig().CRON_SECRET;
+  const secret = process.env.CRON_SECRET?.trim();
   if (!secret) return NextResponse.json({ ok: false, error: "CRON_SECRET не задан" }, { status: 503 });
   if (!authorized(req, secret)) return NextResponse.json({ ok: false }, { status: 401 });
   if (!isJobName(params.job)) return NextResponse.json({ ok: false, error: "unknown_job", jobs: Object.keys(JOBS) }, { status: 404 });

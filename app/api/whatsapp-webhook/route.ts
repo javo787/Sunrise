@@ -33,7 +33,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false }, { status: 401 });
   }
 
-  void processEvolutionEvent(body, getWhatsAppIntakeDeps())
+  // зависимости собираются внутри async: сбой конфигурации не должен превратить ответ в 500
+  void (async () => processEvolutionEvent(body, getWhatsAppIntakeDeps()))()
     .then((result) => log.info("событие WhatsApp обработано", { result }))
     .catch((err) => log.error("ошибка обработки события WhatsApp", { message: err instanceof Error ? err.message : String(err) }));
 

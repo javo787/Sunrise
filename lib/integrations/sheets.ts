@@ -1,4 +1,4 @@
-import { google } from "googleapis";
+import { auth as googleAuth, sheets as googleSheets } from "@googleapis/sheets";
 import { sheetsConfig } from "@/lib/config";
 import { isLeadSource, LEAD_SOURCES, NEW_LEAD_STAGE, PAYMENT_LABELS } from "@/lib/domain/catalog";
 import { normalizePhone } from "@/lib/domain/phone";
@@ -215,11 +215,11 @@ let cachedApi: SheetsApi | undefined;
 export function getSheetsApi(): SheetsApi {
   if (cachedApi) return cachedApi;
   const cfg = sheetsConfig();
-  const auth = new google.auth.GoogleAuth({
+  const auth = new googleAuth.GoogleAuth({
     credentials: loadCredentials(cfg.GOOGLE_SERVICE_ACCOUNT_JSON),
     scopes: ["https://www.googleapis.com/auth/spreadsheets"],
   });
-  const sheets = google.sheets({ version: "v4", auth });
+  const sheets = googleSheets({ version: "v4", auth });
   const spreadsheetId = cfg.SHEETS_SPREADSHEET_ID;
   // Таймаут на каждый вызов и 3 повтора при 429/5xx
   const requestOptions = { timeout: 15_000, retry: true, retryConfig: { retry: 3 } };

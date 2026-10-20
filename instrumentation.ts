@@ -1,13 +1,8 @@
-// Next.js вызывает register() один раз при старте сервера. Планировщик нужен только в
-// долгоживущем Node-процессе (Render/VPS); ENABLE_INTERNAL_CRON=off отключает его, если
-// задачи запускает внешний планировщик через /api/cron/[job].
+// Next.js вызывает register() один раз при старте сервера. Весь Node-специфичный код вынесен
+// в instrumentation-node.ts и подключается только под проверкой рантайма — иначе Next пытается
+// собрать его и для edge-рантайма, где нет http/https/net.
 export async function register() {
-  if (process.env.NEXT_RUNTIME !== "nodejs") return;
-  if (process.env.ENABLE_INTERNAL_CRON === "off") return;
-  if (!process.env.MONGODB_URI) {
-    console.warn("[scheduler] MONGODB_URI не задан — планировщик не запущен");
-    return;
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    await import("./instrumentation-node");
   }
-  const { startScheduler } = await import("./lib/cron/scheduler");
-  startScheduler();
 }

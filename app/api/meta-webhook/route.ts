@@ -32,7 +32,8 @@ export async function POST(req: Request) {
     return new NextResponse("invalid json", { status: 400 });
   }
 
-  void processMetaPayload(body, getMetaIntakeDeps())
+  // зависимости собираются внутри async: сбой конфигурации не должен превратить ответ в 500
+  void (async () => processMetaPayload(body, getMetaIntakeDeps()))()
     .then((stats) => log.info("событие Meta обработано", stats))
     .catch((err) => log.error("ошибка обработки события Meta", { message: err instanceof Error ? err.message : String(err) }));
 
