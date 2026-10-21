@@ -21,8 +21,20 @@ async function run(req: Request, { params }: { params: { job: string } }) {
   if (!authorized(req, secret)) return NextResponse.json({ ok: false }, { status: 401 });
   if (!isJobName(params.job)) return NextResponse.json({ ok: false, error: "unknown_job", jobs: Object.keys(JOBS) }, { status: 404 });
 
+  const query = new URL(req.url).searchParams;
+  const force = query.get("force") === "1";
+
+  // async=1: ответить сразу, а работу выполнить в фоне. Нужно внешним планировщикам с коротким
+  // таймаутом (у бесплатного cron-job.org он 30 с), а задачи вроде retry-failed могут идти дольше.
+  if (query.get("async") === "1") {
+    const job = params.job;
+    void (async () => JOBS[job]({ force }))().catch((err) =>
+      log.error("фоновая задача по HTTP завершилась ошибкой", { job, message: err instanceof Error ? err.message : String(err) })
+    );
+    return NextResponse.json({ ok: true, job, accepted: true }, { status: 202 });
+  }
+
   try {
-    const force = new URL(req.url).searchParams.get("force") === "1";
     const result = await JOBS[params.job]({ force });
     return NextResponse.json({ ok: true, job: params.job, result });
   } catch (err) {

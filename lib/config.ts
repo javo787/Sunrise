@@ -80,9 +80,9 @@ export const llmConfig = () =>
       .object({
         LLM_PROVIDER: z.preprocess(emptyToUndefined, z.enum(["gemini", "openai"]).default("gemini")),
         GEMINI_API_KEY: optStr(),
-        GEMINI_MODEL: z.preprocess(emptyToUndefined, z.string().default("gemini-3.8-flash")),
-        GEMINI_MODEL_FALLBACK_1: z.preprocess(emptyToUndefined, z.string().default("gemini-3.7-flash")),
-        GEMINI_MODEL_FALLBACK_2: z.preprocess(emptyToUndefined, z.string().default("gemini-3.5-flash-lite")),
+        GEMINI_MODEL: z.preprocess(emptyToUndefined, z.string().default("gemini-2.5-flash")),
+        GEMINI_MODEL_FALLBACK_1: z.preprocess(emptyToUndefined, z.string().default("gemini-2.5-flash-lite")),
+        GEMINI_MODEL_FALLBACK_2: optStr(),
         OPENAI_API_KEY: optStr(),
         OPENAI_MODEL: z.preprocess(emptyToUndefined, z.string().default("gpt-4o-mini")),
         LLM_TIMEOUT_MS: num(20000),
