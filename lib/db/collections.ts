@@ -101,6 +101,25 @@ export interface FailedEventDoc {
   createdAt: Date;
 }
 
+/** Сохранённое входящее сообщение клиента: страховка на случай перезапуска до обработки пачки. */
+export interface InboxDoc {
+  key: string;
+  message: {
+    channel: "whatsapp" | "instagram";
+    contactId: string;
+    replyTo: string;
+    phone?: string;
+    name?: string;
+    text: string;
+    /** голосовое: сами аудиоданные в БД не храним, при восстановлении остаётся текстовая пометка */
+    hadAudio?: boolean;
+  };
+  status: "queued" | "processing" | "done" | "failed";
+  attempts: number;
+  createdAt: Date;
+  lockAt?: Date;
+}
+
 export interface ReportLogDoc {
   kind: "daily" | "monthly";
   period: string;
@@ -135,6 +154,8 @@ async function createIndexes(): Promise<void> {
     db.collection("events").createIndex({ createdAt: 1 }, { expireAfterSeconds: 7 * DAY }),
     db.collection("failed_events").createIndex({ createdAt: 1 }, { expireAfterSeconds: 30 * DAY }),
     db.collection("report_log").createIndex({ kind: 1, period: 1 }, { unique: true }),
+    db.collection("inbox").createIndex({ status: 1, createdAt: 1 }),
+    db.collection("inbox").createIndex({ createdAt: 1 }, { expireAfterSeconds: 3 * DAY }),
     db.collection("tg_flows").createIndex({ userId: 1 }, { unique: true }),
     db.collection("tg_flows").createIndex({ updatedAt: 1 }, { expireAfterSeconds: DAY }),
   ]);
@@ -161,6 +182,7 @@ export const managersCol = () => col<ManagerDoc>("managers");
 export const sessionsCol = () => col<SessionDoc>("sessions");
 export const eventsCol = () => col<ProcessedEventDoc>("events");
 export const failedEventsCol = () => col<FailedEventDoc>("failed_events");
+export const inboxCol = () => col<InboxDoc>("inbox");
 export const reportLogCol = () => col<ReportLogDoc>("report_log");
 export const flowsCol = () => col<FlowDoc>("tg_flows");
 

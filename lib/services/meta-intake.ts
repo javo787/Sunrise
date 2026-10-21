@@ -3,7 +3,6 @@ import { claimEvent, deleteFailure, listRecentFailures, recordFailure, releaseEv
 import type { IntakeResult, NewLeadInput } from "@/lib/db/leads";
 import { fetchLeadgen, mapLeadFields, parseMetaPayload, type MetaLead } from "@/lib/integrations/meta";
 import { createLogger } from "@/lib/logger";
-import type { Batcher } from "./batcher";
 import type { InboundMessage } from "./sales-bot";
 
 const log = createLogger("meta-intake");
@@ -12,7 +11,7 @@ export const META_LEADGEN_FAILURE = "meta_leadgen";
 
 export interface MetaIntakeDeps {
   registerLead: (input: NewLeadInput) => Promise<IntakeResult>;
-  batcher: Pick<Batcher<InboundMessage>, "push">;
+  batcher: { push: (key: string, item: InboundMessage) => void | Promise<void> };
   fetchLead?: (leadgenId: string) => Promise<MetaLead>;
 }
 
@@ -69,7 +68,7 @@ export async function processMetaPayload(body: unknown, deps: MetaIntakeDeps): P
       stats.duplicates++;
       continue;
     }
-    deps.batcher.push(`instagram:${m.senderId}`, { channel: "instagram", contactId: m.senderId, replyTo: m.senderId, text: m.text });
+    await deps.batcher.push(`instagram:${m.senderId}`, { channel: "instagram", contactId: m.senderId, replyTo: m.senderId, text: m.text });
     stats.messages++;
   }
   return stats;

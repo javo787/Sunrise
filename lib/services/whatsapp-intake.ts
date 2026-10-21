@@ -1,6 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
 import { resolveWhatsAppJid } from "@/lib/whatsapp-jid";
-import type { Batcher } from "./batcher";
 import type { InboundMessage } from "./sales-bot";
 
 // Приём вебхука Evolution API (MESSAGES_UPSERT). Вебхук отвечает 200 сразу, а разбор и
@@ -85,7 +84,7 @@ export function isEvolutionAuthorized(args: {
 }
 
 export interface WhatsAppIntakeDeps {
-  batcher: Pick<Batcher<InboundMessage>, "push">;
+  batcher: { push: (key: string, item: InboundMessage) => void | Promise<void> };
   claimEvent: (key: string) => Promise<boolean>;
   supportsAudio: boolean;
   fetchAudio: (key: unknown) => Promise<{ base64: string; mimetype: string }>;
@@ -111,7 +110,7 @@ export async function processEvolutionEvent(body: unknown, deps: WhatsAppIntakeD
     }
   }
 
-  deps.batcher.push(`whatsapp:${parsed.contactId}`, {
+  await deps.batcher.push(`whatsapp:${parsed.contactId}`, {
     channel: "whatsapp",
     contactId: parsed.contactId,
     replyTo: parsed.replyTo,

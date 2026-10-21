@@ -90,3 +90,11 @@ export function renderEscalation(lead: Lead, minutes: number, mentions: Mention[
   const tags = mentions.map((m) => `<a href="tg://user?id=${m.id}">${esc(m.name)}</a>`).join(", ");
   return [`⏰ <b>Лид #${shortId(lead)} не забран уже ${minutes} мин!</b>`, `${esc(lead.name)} · ${esc(lead.source)}`, ...(tags ? ["", tags] : [])].join("\n");
 }
+
+const CHANNEL_LABEL: Record<string, string> = { whatsapp: "WhatsApp", instagram: "Instagram" };
+
+/** Новое сообщение клиента после передачи лида. В общую группу телефон не показываем. */
+export function renderClientMessage(lead: Lead, texts: string[], channel: string, withPhone: boolean): string {
+  const who = [esc(lead.name), ...(withPhone ? [`<code>${esc(formatPhone(lead.phone))}</code>`] : []), esc(CHANNEL_LABEL[channel] ?? channel)].join(" · ");
+  return [`💬 <b>Клиент написал</b> · #${shortId(lead)}`, `👤 ${who}`, "", esc(texts.join("\n").slice(0, 600))].join("\n");
+}

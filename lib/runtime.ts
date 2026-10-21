@@ -7,6 +7,8 @@ import { sendReportMail } from "@/lib/integrations/mail";
 import { createLogger } from "@/lib/logger";
 import { Batcher } from "@/lib/services/batcher";
 import { sendViaChannel } from "@/lib/services/channels";
+import { relayClientMessage } from "@/lib/services/handoff-relay";
+import { markInboxDone, recordInbound } from "@/lib/services/inbox";
 import { registerLead, type PipelineDeps } from "@/lib/services/lead-pipeline";
 import { sendReport, type ReportDeps, type ReportKind } from "@/lib/services/reports";
 import { handleInboundBatch, type InboundMessage, type SalesBotDeps } from "@/lib/services/sales-bot";
@@ -75,11 +77,12 @@ export function getReportDeps(opts: { chatId?: number; email?: boolean } = {}): 
   };
 }
 
-function salesBotDeps(): SalesBotDeps {
+export function getSalesBotDeps(): SalesBotDeps {
   return {
     llm: getLlmClient(),
     sendBubbles: sendViaChannel,
     registerLead: (input) => registerLead(getPipelineDeps(), input),
+    relayAfterHandoff: (session, batch) => relayClientMessage({ gateway: getPipelineDeps().gateway }, session, batch),
     maxUserTurns: coreConfig().AI_MAX_USER_TURNS,
   };
 }
@@ -89,7 +92,9 @@ export function getInboundBatcher(): Batcher<InboundMessage> {
     batcher = new Batcher<InboundMessage>({
       debounceMs: coreConfig().BATCH_DEBOUNCE_MS,
       onFlush: async (_key, items) => {
-        await handleInboundBatch(salesBotDeps(), items);
+        await handleInboundBatch(getSalesBotDeps(), items);
+        // пометка только при успехе: при сбое сообщения останутся в очереди и их доберёт cron
+        await markInboxDone(items.map((m) => m.inboxId));
       },
       onError: (key, err) => log.error("обработка пачки сообщений клиента завершилась ошибкой", { key, message: err instanceof Error ? err.message : String(err) }),
     });
@@ -97,9 +102,19 @@ export function getInboundBatcher(): Batcher<InboundMessage> {
   return batcher;
 }
 
+/** Очередь входящих: сначала запись в БД (страховка от перезапуска), затем склейка в памяти. */
+export function getInboundQueue(): { push: (key: string, item: InboundMessage) => Promise<void> } {
+  return {
+    push: async (key, item) => {
+      const inboxId = await recordInbound(key, item);
+      getInboundBatcher().push(key, { ...item, inboxId });
+    },
+  };
+}
+
 export function getWhatsAppIntakeDeps(): WhatsAppIntakeDeps {
   return {
-    batcher: getInboundBatcher(),
+    batcher: getInboundQueue(),
     claimEvent: (key) => claimEvent(key),
     supportsAudio: getLlmClient().supportsAudio,
     fetchAudio: (key) => fetchMediaBase64(key),
@@ -108,7 +123,7 @@ export function getWhatsAppIntakeDeps(): WhatsAppIntakeDeps {
 
 export function getMetaIntakeDeps(): MetaIntakeDeps {
   return {
-    batcher: getInboundBatcher(),
+    batcher: getInboundQueue(),
     registerLead: (input) => registerLead(getPipelineDeps(), input),
   };
 }

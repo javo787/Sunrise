@@ -27,12 +27,16 @@ export interface InboundMessage {
   text: string;
   audio?: { base64: string; mimeType: string };
   readKeys?: ReadKey[];
+  /** id записи во входящей очереди (inbox) — по нему сообщение помечается обработанным */
+  inboxId?: string;
 }
 
 export interface SalesBotDeps {
   llm: LlmClient;
   sendBubbles: (session: Session, bubbles: string[], inbound: InboundMessage[]) => Promise<void>;
   registerLead: (input: NewLeadInput) => Promise<IntakeResult>;
+  /** Сообщения клиента ПОСЛЕ передачи лида менеджеру: бот молчит, но менеджер должен их увидеть */
+  relayAfterHandoff?: (session: Session, batch: InboundMessage[]) => Promise<unknown>;
   maxUserTurns: number;
   now?: () => Date;
   log?: Logger;
@@ -137,7 +141,14 @@ export async function handleInboundBatch(deps: SalesBotDeps, batch: InboundMessa
   const now = deps.now?.() ?? new Date();
 
   const session = await getOrCreateSession(first.channel, first.contactId, first.replyTo, now);
-  if (session.handedOff) return { kind: "ignored", reason: "handed_off" };
+  if (session.handedOff) {
+    try {
+      await deps.relayAfterHandoff?.(session, batch);
+    } catch (err) {
+      log.error("не удалось переслать сообщение клиента менеджеру", { message: err instanceof Error ? err.message : String(err) });
+    }
+    return { kind: "ignored", reason: "handed_off" };
+  }
 
   const text = batch.map((m) => m.text).filter(Boolean).join("\n");
   const audio = batch.find((m) => m.audio)?.audio;

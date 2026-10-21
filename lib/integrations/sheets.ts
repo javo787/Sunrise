@@ -132,7 +132,7 @@ export function buildCells(lead: Lead, columns: ColumnMap, opts: { now: Date; tz
   return SHEET_FIELDS.filter((f) => columns[f] !== undefined && all[f] !== undefined).map((f) => ({ field: f, value: all[f] as string | number }));
 }
 
-const q = (sheet: string) => `'${sheet.replace(/'/g, "''")}'`;
+export const q = (sheet: string) => `'${sheet.replace(/'/g, "''")}'`;
 const IDEMPOTENCY_LOOKBACK_ROWS = 200;
 const MAX_WRITE_ATTEMPTS = 3;
 

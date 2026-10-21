@@ -63,7 +63,8 @@ describe("публикация карточки", () => {
     expect(stored?.publishedAt).toBeInstanceOf(Date);
 
     const text = renderLeadCard(lead);
-    expect(text).not.toMatch(/992|931234567|123 45 67/);
+    // ищем «+992» и полные цифры номера, а не «992»: случайный #ID карточки может содержать эти символы
+    expect(text).not.toMatch(/\+992|992931234567|931234567|123 45 67/);
     expect(text).toContain("Номер скрыт");
     expect(text).toContain("этаж 5 · 45 м²");
     expect(text).toContain("$56 700"); // ориентир по прайсу: 45 м² × $1 260

@@ -1,9 +1,13 @@
 import { coreConfig, isConfigured, sheetsConfig } from "@/lib/config";
 import { isLastDayOfMonth } from "@/lib/domain/time";
-import { getMetaIntakeDeps, getPipelineDeps, getReportDeps } from "@/lib/runtime";
+import { getMetaIntakeDeps, getPipelineDeps, getReportDeps, getSalesBotDeps } from "@/lib/runtime";
+import { recoverStaleInbox } from "@/lib/services/inbox";
+import { handleInboundBatch } from "@/lib/services/sales-bot";
 import { escalateStaleLeads, publishPendingLeads } from "@/lib/services/lead-pipeline";
 import { retryFailedLeadgens } from "@/lib/services/meta-intake";
 import { sendReport } from "@/lib/services/reports";
+import { getSheetsApi, parseColumnOverrides } from "@/lib/integrations/sheets";
+import { checkSpreadsheet } from "@/lib/services/sheet-check";
 import { retryPendingSheetSyncs } from "@/lib/services/sheet-sync";
 
 // Фоновые задачи. Одни и те же функции запускает и node-cron (instrumentation.ts), и HTTP-эндпоинт
@@ -19,11 +23,17 @@ export const JOBS = {
     const escalated = await escalateStaleLeads(deps);
     return { published, escalated };
   },
-  /** каждые 5 минут: повторная запись в таблицу и повтор лид-форм Meta, которые не удалось получить */
+  /** каждые 5 минут: повторная запись в таблицу, повтор лид-форм Meta и сообщений клиентов, потерянных при перезапуске */
   "retry-failed": async () => {
     const sheets = isConfigured(sheetsConfig) ? await retryPendingSheetSyncs() : "sheets_not_configured";
     const meta = await retryFailedLeadgens(getMetaIntakeDeps());
-    return { sheets, meta };
+    const inbox = await recoverStaleInbox((batch) => handleInboundBatch(getSalesBotDeps(), batch));
+    return { sheets, meta, inbox };
+  },
+  /** вручную: сверка заголовков листов менеджеров и справочника _Lists с кодом (ничего не записывает) */
+  "sheets-check": async () => {
+    const cfg = sheetsConfig();
+    return checkSpreadsheet(getSheetsApi(), { headerRow: cfg.SHEETS_HEADER_ROW, overrides: parseColumnOverrides(cfg.SHEETS_COLUMNS) });
   },
   "report-daily": async () => ({ result: await sendReport("daily", new Date(), getReportDeps()) }),
   "report-monthly": async (opts: JobOptions = {}) => {

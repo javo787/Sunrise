@@ -90,6 +90,23 @@ describe("квалификация в WhatsApp", () => {
     expect(sendBubbles).not.toHaveBeenCalled();
   });
 
+  it("после передачи сообщения клиента пересылаются менеджеру; сбой пересылки бота не ломает", async () => {
+    const relay = jest.fn(async (_session: unknown, _batch: InboundMessage[]) => undefined);
+    deps.relayAfterHandoff = relay;
+    llm.generate.mockResolvedValue(res("ок"));
+    await handleInboundBatch(deps, [wa("5 этаж, рассрочка")]);
+    expect(relay).not.toHaveBeenCalled(); // пока лид только создаётся, пересылать нечего
+
+    const out = await handleInboundBatch(deps, [wa("а когда сдача?")]);
+    expect(out).toEqual({ kind: "ignored", reason: "handed_off" });
+    expect(relay).toHaveBeenCalledTimes(1);
+    expect(relay.mock.calls[0][0]).toMatchObject({ handedOff: true });
+    expect(relay.mock.calls[0][1][0].text).toBe("а когда сдача?");
+
+    relay.mockRejectedValue(new Error("telegram down"));
+    expect(await handleInboundBatch(deps, [wa("алло")])).toEqual({ kind: "ignored", reason: "handed_off" });
+  });
+
   it("модель узнала этаж, которого не поймали регулярки → ответ перегенерируется с верными цифрами", async () => {
     llm.generate
       .mockResolvedValueOnce(res("Какой этаж интересует?", { floor: 7 })) // ответ по старой справке
