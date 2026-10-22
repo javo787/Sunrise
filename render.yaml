@@ -13,7 +13,7 @@ services:
     # 512 МБ проверка типов при сборке лишняя. Запуск без обёртки npm экономит ~75 МБ памяти.
     buildCommand: npm ci --include=dev && SKIP_TYPECHECK=1 NODE_OPTIONS=--max-old-space-size=400 npm run build
     startCommand: node node_modules/next/dist/bin/next start
-    healthCheckPath: /api/health
+    healthCheckPath: /api/ping
     autoDeploy: true
     envVars:
       - { key: NODE_VERSION, value: "20" }

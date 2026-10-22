@@ -79,7 +79,7 @@ Windows PowerShell: `-join ((48..57)+(65..90)+(97..122) | Get-Random -Count 32 |
 | Build Command | `npm ci --include=dev && SKIP_TYPECHECK=1 NODE_OPTIONS=--max-old-space-size=400 npm run build` |
 | Start Command | `node node_modules/next/dist/bin/next start` |
 | Instance Type | **Free** |
-| Advanced → Health Check Path | `/api/health` |
+| Advanced → Health Check Path | `/api/ping` (всегда отвечает 200; `/api/health` — для диагностики) |
 
 4. **Environment Variables → Add from .env** — вставьте блок (подставьте свои значения; пустые строки можно не вставлять):
 
@@ -104,9 +104,11 @@ SHEETS_SPREADSHEET_ID=<шаг 4>
 ```
 
    `TELEGRAM_MANAGERS_CHAT_ID=0` и пустой `TELEGRAM_ADMIN_IDS` — временно, их заполним на шаге 7. Остальные переменные (`META_*`, `EVOLUTION_*`, `WHATSAPP_WEBHOOK_SECRET`, `SHEETS_COLUMNS`, `PUBLIC_BASE_URL`) добавите позже.
-5. **Create Web Service**. Сборка займёт несколько минут. Когда сервис станет **Live**, откройте `https://<имя>.onrender.com/api/health` — должно быть `"ok": true`. Добавьте `PUBLIC_BASE_URL` = этот адрес (без слэша в конце). Render перезапустится сам.
+5. **Create Web Service**. Сборка займёт несколько минут. Когда сервис станет **Live**, откройте `https://<имя>.onrender.com/api/ping` (должно быть `"status":"ok"`), затем `/api/health` — там `"ok": true` означает, что БД и Telegram настроены. Добавьте `PUBLIC_BASE_URL` = этот адрес (без слэша в конце). Render перезапустится сам.
 
 С вариантом А обязательно сделайте шаг 8 (cron-job.org), иначе сервис уснёт.
+
+> **Важно про 750 бесплатных часов.** Они общие на весь аккаунт/воркспейс Render, а не на сервис: один круглосуточный сервис = 744 ч. Если в этом же аккаунте уже работает другой бесплатный круглосуточный сервис (например, бот `usmle_pathway` с `node bot.js`), то два сервиса исчерпают лимит примерно к 15-му числу, и Render приостановит оба до конца месяца. Решения: завести Sunrise в **отдельном аккаунте Render** (другой e-mail), либо перенести второй сервис на свой сервер (вариант Б).
 
 ### Вариант Б. Свой сервер (VPS) — без карты Render, без сна, без cron-job.org
 
