@@ -4,7 +4,7 @@
 
 | Что | Где | Бесплатные условия |
 |---|---|---|
-| Сервер | **Render** (Web Service, Free) | 750 ч/мес на аккаунт (круглосуточный сервис = 744 ч, поэтому **только один** бесплатный сервис), засыпает через 15 мин без входящих запросов, может перезапускаться в любой момент |
+| Сервер | **Render** (Web Service, Free; может потребовать карту для верификации) или **свой сервер** | 750 ч/мес на аккаунт (круглосуточный сервис = 744 ч, поэтому **только один** бесплатный сервис), засыпает через 15 мин без входящих запросов, может перезапускаться в любой момент |
 | База данных | **MongoDB Atlas M0** | бессрочно, 512 МБ (хватит на годы: ~6 000 лидов в месяц — это десятки МБ) |
 | «Будильник» и планировщик | **cron-job.org** | бесплатно, раз в минуту, свои заголовки, таймаут 30 с |
 | ИИ | **Google AI Studio (Gemini)** | бесплатный тариф с лимитами по запросам; Google может использовать запросы для улучшения моделей |
@@ -55,27 +55,71 @@
 Windows PowerShell: `-join ((48..57)+(65..90)+(97..122) | Get-Random -Count 32 | % {[char]$_})` · macOS/Linux: `openssl rand -hex 24`. Или любой менеджер паролей.
 `META_VERIFY_TOKEN` — тоже любая своя строка (понадобится на шаге 11).
 
-## Шаг 6. Render (сервер)
+## Шаг 6. Где запускать сервер — выберите вариант
 
-1. render.com → зарегистрируйтесь (можно через GitHub) → **New → Blueprint** → подключите GitHub и выберите репозиторий **javo787/Sunrise**, ветка `main`. Render прочитает `render.yaml` (тариф Free, Frankfurt).
-2. Render спросит значения секретов. Заполните:
+**Blueprint (`render.yaml`) не обязателен** — сервис на Render можно создать вручную, это тот же бесплатный тариф. Но имейте в виду главное ограничение: **Render иногда требует банковскую карту для верификации** (холд ≈ $1, он сразу возвращается, сервис остаётся бесплатным). Поддержка Render пишет, что другого способа верификации у них нет. Если карты нет — идите по варианту Б.
 
-| Переменная | Значение |
+Проверено и **не подходит**:
+* **Hugging Face Spaces** — Docker-пространства теперь требуют платный план, а исходящие соединения разрешены только на порты 80/443/8080, то есть MongoDB Atlas (порт 27017) оттуда недоступен.
+* **Koyeb** (с февраля 2026 нужна карта с холдом $29), **Fly.io**, **Northflank**, **Oracle/Google Cloud** — просят карту.
+* По обзорам, бесплатные контейнеры **Back4app** (работает ограниченное время после деплоя) и **SnapDeploy** (100 ч/мес) для круглосуточной работы не годятся. Условия таких сервисов быстро меняются — перепроверяйте.
+
+### Вариант А. Render Free, вручную (нужна карта для верификации)
+
+1. render.com → Sign up (удобно через GitHub). Если попросит карту — это верификация, холд возвращается.
+2. **New + → Web Service → Build and deploy from a Git repository** → подключите GitHub и дайте Render доступ к приватному репозиторию **javo787/Sunrise**.
+3. Поля формы:
+
+| Поле | Значение |
 |---|---|
-| `MONGODB_URI` | строка из шага 1 |
-| `PUBLIC_BASE_URL` | пока пусто (впишем после первого деплоя) |
-| `CRON_SECRET` | строка из шага 5 |
-| `TELEGRAM_BOT_TOKEN` | токен от BotFather |
-| `TELEGRAM_WEBHOOK_SECRET` | строка из шага 5 |
-| `TELEGRAM_MANAGERS_CHAT_ID` | **`0`** (временно, узнаем на шаге 7) |
-| `TELEGRAM_ADMIN_IDS` | пусто (узнаем на шаге 7) |
-| `GEMINI_API_KEY` | ключ из шага 3 |
-| `GOOGLE_SERVICE_ACCOUNT_JSON` | base64 из шага 4 |
-| `SHEETS_SPREADSHEET_ID` | ID таблицы из шага 4 |
-| `META_*`, `EVOLUTION_*`, `WHATSAPP_WEBHOOK_SECRET`, `SHEETS_COLUMNS` | пока можно оставить пустыми (шаги 9–11) |
+| Name | `sunrise-crm` |
+| Region | Frankfurt |
+| Branch | `main` |
+| Runtime | Node |
+| Build Command | `npm ci --include=dev && SKIP_TYPECHECK=1 NODE_OPTIONS=--max-old-space-size=400 npm run build` |
+| Start Command | `node node_modules/next/dist/bin/next start` |
+| Instance Type | **Free** |
+| Advanced → Health Check Path | `/api/health` |
 
-3. Нажмите **Apply**. Сборка займёт несколько минут. Когда сервис станет **Live**, откройте его адрес (`https://sunrise-crm-xxxx.onrender.com`) и добавьте `/api/health` — должно быть `"ok": true`.
-4. Вернитесь в **Environment** сервиса и впишите `PUBLIC_BASE_URL` = ваш адрес (без слэша в конце). Render перезапустится сам.
+4. **Environment Variables → Add from .env** — вставьте блок (подставьте свои значения; пустые строки можно не вставлять):
+
+```
+NODE_VERSION=20
+TIMEZONE=Asia/Dushanbe
+MONGODB_DB=sunrise
+ESCALATION_MINUTES=15
+MANUAL_LEADS_ASSIGN=self
+LLM_PROVIDER=gemini
+GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL_FALLBACK_1=gemini-2.5-flash-lite
+MONGODB_URI=<шаг 1>
+CRON_SECRET=<шаг 5>
+TELEGRAM_BOT_TOKEN=<шаг 2>
+TELEGRAM_WEBHOOK_SECRET=<шаг 5>
+TELEGRAM_MANAGERS_CHAT_ID=0
+TELEGRAM_ADMIN_IDS=
+GEMINI_API_KEY=<шаг 3>
+GOOGLE_SERVICE_ACCOUNT_JSON=<base64 из шага 4>
+SHEETS_SPREADSHEET_ID=<шаг 4>
+```
+
+   `TELEGRAM_MANAGERS_CHAT_ID=0` и пустой `TELEGRAM_ADMIN_IDS` — временно, их заполним на шаге 7. Остальные переменные (`META_*`, `EVOLUTION_*`, `WHATSAPP_WEBHOOK_SECRET`, `SHEETS_COLUMNS`, `PUBLIC_BASE_URL`) добавите позже.
+5. **Create Web Service**. Сборка займёт несколько минут. Когда сервис станет **Live**, откройте `https://<имя>.onrender.com/api/health` — должно быть `"ok": true`. Добавьте `PUBLIC_BASE_URL` = этот адрес (без слэша в конце). Render перезапустится сам.
+
+С вариантом А обязательно сделайте шаг 8 (cron-job.org), иначе сервис уснёт.
+
+### Вариант Б. Свой сервер (VPS) — без карты Render, без сна, без cron-job.org
+
+Подходит, если у вас уже есть сервер, например тот, где работает Evolution API для meditour-crm: приложению нужно около 115–200 МБ памяти.
+
+1. Docker и Docker Compose на сервере. Клонируйте репозиторий (`git clone https://github.com/javo787/Sunrise`, для приватного репозитория — с токеном).
+2. `cp .env.example .env` → заполните значения (как в таблице выше; для варианта Б `ENABLE_INTERNAL_CRON` оставьте `on`).
+3. `docker compose up -d --build`. Приложение слушает только `127.0.0.1:3000`.
+4. Нужен **публичный HTTPS-адрес** для вебхуков (Telegram, Meta, Evolution). Направьте на `http://127.0.0.1:3000` обратный прокси, который у вас уже есть (Caddy, nginx, Nginx Proxy Manager) или добавьте поддомен, например `sunrise.ваш-домен.tj` → `reverse_proxy 127.0.0.1:3000` (Caddy сам получит сертификат). Этот адрес — `PUBLIC_BASE_URL`.
+5. Проверка: `curl https://sunrise.ваш-домен.tj/api/health` → `"ok": true`. Логи: `docker compose logs -f sunrise`. Обновление: `git pull && docker compose up -d --build`.
+6. **Шаг 8 (cron-job.org) пропустите:** сервер не засыпает, а встроенный планировщик работает сам. Запустите ровно один экземпляр.
+
+Образ собирается из `Dockerfile` в репозитории (проверен вручную по шагам, но в `docker build` в моей среде не запускался).
 
 ## Шаг 7. Telegram: вебхук, ID, менеджеры
 
@@ -94,9 +138,9 @@ Windows PowerShell: `-join ((48..57)+(65..90)+(97..122) | Get-Random -Count 32 |
 
    Один лист — один менеджер. Список: `/managers`.
 
-## Шаг 8. cron-job.org (будильник и планировщик)
+## Шаг 8. cron-job.org (будильник и планировщик) — только для варианта А (Render)
 
-Без этого бесплатный Render уснёт и эскалация через 15 минут не сработает.
+Без этого бесплатный Render уснёт и эскалация через 15 минут не сработает. На своём сервере (вариант Б) этот шаг не нужен.
 
 1. Зарегистрируйтесь на cron-job.org (бесплатно). В настройках аккаунта выставьте часовой пояс **Asia/Dushanbe**.
 2. **Create cronjob** — создайте задачи. У каждой: метод **GET**, во вкладке **Advanced → Headers** добавьте заголовок `x-cron-secret` со значением вашего `CRON_SECRET`.

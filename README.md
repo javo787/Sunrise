@@ -29,7 +29,7 @@ WhatsApp ─────┤   (цены из кода)   телефон+этаж
 
 ## Запуск
 
-**Пошаговая инструкция по бесплатному развёртыванию (Render + MongoDB Atlas + cron-job.org) — в [DEPLOY.md](DEPLOY.md).**
+**Пошаговая инструкция по бесплатному развёртыванию (Render вручную или свой сервер через Docker, MongoDB Atlas, cron-job.org) — в [DEPLOY.md](DEPLOY.md).**
 
 ```bash
 cp .env.example .env.local      # заполнить значения

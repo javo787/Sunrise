@@ -1,0 +1,16 @@
+# Запуск на своём сервере:  cp .env.example .env  →  заполнить  →  docker compose up -d --build
+# Наружу порт не публикуется: он слушает только 127.0.0.1:3000, а HTTPS-адрес для вебхуков
+# даёт ваш обратный прокси (Caddy / nginx / Nginx Proxy Manager) → http://127.0.0.1:3000
+services:
+  sunrise:
+    build: .
+    image: sunrise-crm
+    container_name: sunrise-crm
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "127.0.0.1:3000:3000"
+    mem_limit: 400m
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
