@@ -3,7 +3,8 @@ import { MongoClient, type Db } from "mongodb";
 // Один долгоживущий Node-процесс (Render/VPS), а не serverless: клиент кэшируется
 // на уровне модуля. В dev Next.js перезагружает модули — храним промис на global.
 // Таймауты заданы явно: по умолчанию драйвер ждёт выбор сервера 30 с на КАЖДЫЙ вызов,
-// и при сбое Atlas один вебхук мог зависнуть на минуты.
+// и при сбое Atlas один вебхук мог зависнуть на минуты. 5 с — компромисс: хватает на «холодный» старт
+// кластера, но укладывается в окно ответа Telegram.
 
 declare global {
   // eslint-disable-next-line no-var
@@ -15,7 +16,7 @@ let clientPromise: Promise<MongoClient> | undefined;
 function connect(): Promise<MongoClient> {
   const uri = process.env.MONGODB_URI;
   if (!uri) throw new Error("MONGODB_URI не задан — см. .env.example");
-  return new MongoClient(uri, { serverSelectionTimeoutMS: 8000, connectTimeoutMS: 8000 }).connect();
+  return new MongoClient(uri, { serverSelectionTimeoutMS: 5000, connectTimeoutMS: 5000 }).connect();
 }
 
 function getClientPromise(): Promise<MongoClient> {

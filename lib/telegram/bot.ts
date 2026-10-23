@@ -28,9 +28,32 @@ export function registerHandlers(bot: Bot, deps: BotDeps): void {
   const isAdmin = (ctx: Context) => Boolean(ctx.from && adminIds.includes(ctx.from.id));
   const isPrivate = (ctx: Context) => ctx.chat?.type === "private";
 
-  // Telegram повторяет доставку при таймауте — каждое обновление обрабатываем один раз.
+  // ВАЖНО: bot.catch(...) в grammY срабатывает только при long-polling. В режиме вебхука ошибка
+  // обработчика вылетала бы наружу как HTTP 500 («Wrong response from the webhook»), и бот
+  // выглядел бы молчащим. Поэтому ловушка ошибок — первый middleware: логируем, предупреждаем
+  // пользователя и возвращаем управление, чтобы вебхук ответил 200.
   bot.use(async (ctx, next) => {
-    if (!(await claimEvent(`tg:${ctx.update.update_id}`))) return;
+    try {
+      await next();
+    } catch (err) {
+      log.error("ошибка обработчика Telegram", { updateId: ctx.update.update_id, message: err instanceof Error ? err.message : String(err) });
+      try {
+        if (ctx.callbackQuery) await ctx.answerCallbackQuery({ text: "⚠️ Ошибка сервера. Попробуйте ещё раз через минуту.", show_alert: true });
+        else if (ctx.chat?.type === "private") await ctx.reply("⚠️ Внутренняя ошибка сервера. Попробуйте ещё раз через минуту.");
+      } catch {
+        // сообщить об ошибке не удалось — остаётся запись в логе
+      }
+    }
+  });
+
+  // Telegram повторяет доставку при таймауте — каждое обновление обрабатываем один раз.
+  // Если БД недоступна, дедупликацию пропускаем (лучше иногда обработать дважды, чем молчать).
+  bot.use(async (ctx, next) => {
+    try {
+      if (!(await claimEvent(`tg:${ctx.update.update_id}`))) return;
+    } catch (err) {
+      log.warn("дедупликация обновлений недоступна — обрабатываем без неё", { message: err instanceof Error ? err.message : String(err) });
+    }
     await next();
   });
 
@@ -38,14 +61,24 @@ export function registerHandlers(bot: Bot, deps: BotDeps): void {
 
   bot.command("start", async (ctx) => {
     if (!isPrivate(ctx) || !ctx.from) return;
-    const manager = await getActiveManager(ctx.from.id);
+    let manager = null;
+    let dbDown = false;
+    try {
+      manager = await getActiveManager(ctx.from.id);
+    } catch (err) {
+      dbDown = true;
+      log.error("/start: БД недоступна", { message: err instanceof Error ? err.message : String(err) });
+    }
     if (manager) {
       await ctx.reply(
         `Здравствуйте, ${manager.name}! Вы подключены к листу «${manager.sheetName}».\nКнопка внизу — ручной ввод клиента (звонок, Somon.tj, баннер, визит в офис).`,
         { reply_markup: mainKeyboard }
       );
     } else {
-      await ctx.reply(`Ваш Telegram ID: ${ctx.from.id}\nПередайте его руководителю — он подключит вас к команде.`);
+      await ctx.reply(
+        `Ваш Telegram ID: ${ctx.from.id}\n` +
+          (dbDown ? "⚠️ База данных сейчас недоступна — проверить, подключены ли вы как менеджер, не удалось." : "Передайте его руководителю — он подключит вас к команде.")
+      );
     }
     if (isAdmin(ctx)) {
       await ctx.reply("Команды руководителя:\n/managers — список\n/addmanager <id> <Менеджер N> <имя>\n/removemanager <id>\n/report day|month — отчёт сейчас");
@@ -218,8 +251,9 @@ export function registerHandlers(bot: Bot, deps: BotDeps): void {
     return next();
   });
 
+  // Запасной вариант для long-polling (в вебхуке не вызывается — см. ловушку ошибок выше).
   bot.catch((err) => {
-    log.error("ошибка обработчика Telegram", { updateId: err.ctx.update.update_id, message: err.error instanceof Error ? err.error.message : String(err.error) });
+    log.error("ошибка обработчика Telegram (polling)", { updateId: err.ctx.update.update_id, message: err.error instanceof Error ? err.error.message : String(err.error) });
   });
 }
 

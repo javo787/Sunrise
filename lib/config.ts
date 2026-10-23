@@ -59,6 +59,8 @@ export const telegramConfig = () =>
       TELEGRAM_MANAGERS_CHAT_ID: z.preprocess(emptyToUndefined, intId),
       TELEGRAM_ADMIN_IDS: csv.transform((ids) => ids.map(Number).filter(Number.isInteger)),
       TELEGRAM_REPORT_CHAT_ID: z.preprocess(emptyToUndefined, intId.optional()),
+      // необязательно: свой корень Bot API (по умолчанию https://api.telegram.org) — для тестов и Local Bot API Server
+      TELEGRAM_API_ROOT: optStr(),
     })
   );
 

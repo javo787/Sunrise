@@ -253,6 +253,42 @@ describe("клик 🦈 в группе", () => {
   });
 });
 
+describe("недоступная БД и ошибки обработчика (режим вебхука)", () => {
+  const dbDown = () => (getDb as jest.Mock).mockRejectedValue(new Error("connect ECONNREFUSED"));
+
+  it("/whoami отвечает даже при полностью недоступной БД (раньше бот молчал, а вебхук отдавал 500)", async () => {
+    dbDown();
+    await expect(send(777, "/whoami")).resolves.toBeUndefined();
+    expect(lastReply()).toContain("Ваш Telegram ID: 777");
+  });
+
+  it("/start при недоступной БД сообщает ID и предупреждает о БД", async () => {
+    dbDown();
+    await send(777, "/start");
+    expect(lastReply()).toContain("Ваш Telegram ID: 777");
+    expect(lastReply()).toContain("База данных сейчас недоступна");
+  });
+
+  it("ошибка в обработчике не вылетает из handleUpdate; пользователь видит сообщение вместо тишины", async () => {
+    // дедупликация (первое обращение к БД) проходит, а сама команда руководителя падает на БД
+    const original = (getDb as jest.Mock).getMockImplementation();
+    let calls = 0;
+    (getDb as jest.Mock).mockImplementation(async () => {
+      if (++calls > 1) throw new Error("mongo went away");
+      return db;
+    });
+    await expect(send(ADMIN, "/managers")).resolves.toBeUndefined();
+    expect(lastReply()).toContain("Внутренняя ошибка сервера");
+    if (original) (getDb as jest.Mock).mockImplementation(original);
+  });
+
+  it("при ошибке в нажатии кнопки пользователь получает всплывающее предупреждение", async () => {
+    dbDown();
+    await expect(press(ALISA, "claim:64b64b64b64b64b64b64b64b", GROUP)).resolves.toBeUndefined();
+    expect(answers().at(-1)).toMatchObject({ show_alert: true, text: expect.stringContaining("Ошибка сервера") });
+  });
+});
+
 describe("надёжность", () => {
   it("повторная доставка того же обновления обрабатывается один раз", async () => {
     const update = { update_id: 4242, message: { message_id: 1, date: 0, chat: { id: 777, type: "private" }, from: user(777), text: "/whoami", entities: [{ type: "bot_command", offset: 0, length: 7 }] } };

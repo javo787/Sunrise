@@ -36,7 +36,7 @@ function init(): Runtime {
   const tg = telegramConfig();
   const core = coreConfig();
 
-  const bot = new Bot(tg.TELEGRAM_BOT_TOKEN);
+  const bot = new Bot(tg.TELEGRAM_BOT_TOKEN, tg.TELEGRAM_API_ROOT ? { client: { apiRoot: tg.TELEGRAM_API_ROOT } } : undefined);
   const gateway = createTelegramGateway(bot.api, tg.TELEGRAM_MANAGERS_CHAT_ID, core.TIMEZONE);
   const pipeline: PipelineDeps = {
     gateway,
