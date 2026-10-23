@@ -1,11 +1,19 @@
 import { createHmac } from "node:crypto";
 import { resetConfigCache } from "@/lib/config";
+import { getDb } from "@/lib/mongodb";
 import { fetchLeadgen, mapLeadFields, parseMetaPayload, resolveChallenge, sendInstagramText, verifyMetaSignature } from "@/lib/integrations/meta";
+import { FakeDb } from "./helpers/fake-mongo";
+
+jest.mock("@/lib/mongodb", () => ({ getDb: jest.fn() }));
 
 const noSleep = { sleep: async () => undefined };
 
 beforeEach(() => {
   Object.assign(process.env, { META_APP_SECRET: "app-secret", META_VERIFY_TOKEN: "vt", META_PAGE_ACCESS_TOKEN: "PAGE_TOKEN", META_GRAPH_VERSION: "v23.0" });
+  delete process.env.INSTAGRAM_ACCESS_TOKEN;
+  delete process.env.INSTAGRAM_APP_SECRET;
+  delete process.env.INSTAGRAM_USER_ID;
+  (getDb as jest.Mock).mockResolvedValue(new FakeDb());
   resetConfigCache();
 });
 afterEach(() => jest.restoreAllMocks());
@@ -22,6 +30,14 @@ describe("подпись вебхука", () => {
     expect(verifyMetaSignature(body, "sha256=abc", "app-secret")).toBe(false);
     expect(verifyMetaSignature(body, "abc", "app-secret")).toBe(false);
     expect(verifyMetaSignature(body, null, "app-secret")).toBe(false);
+  });
+  it("несколько секретов (основное приложение и приложение Instagram): подходит любой", () => {
+    const secrets = ["app-secret", "ig-secret"];
+    expect(verifyMetaSignature(body, sign(body, "app-secret"), secrets)).toBe(true);
+    expect(verifyMetaSignature(body, sign(body, "ig-secret"), secrets)).toBe(true);
+    expect(verifyMetaSignature(body, sign(body, "third"), secrets)).toBe(false);
+    expect(verifyMetaSignature(body, sign(body, "app-secret"), [])).toBe(false);
+    expect(verifyMetaSignature(body, sign(body, ""), [""])).toBe(false); // пустой секрет не считается секретом
   });
   it("рукопожатие GET: отдаёт challenge только при верном токене", () => {
     const ok = new URLSearchParams({ "hub.mode": "subscribe", "hub.verify_token": "vt", "hub.challenge": "123" });
@@ -50,6 +66,14 @@ describe("parseMetaPayload", () => {
       { mid: "m1", senderId: "U1", text: "Здравствуйте", isEcho: false },
       { mid: "m2", senderId: "PAGE", text: "ответ", isEcho: true },
     ]);
+  });
+
+  it("сообщение от самого аккаунта (ответ менеджера из приложения Instagram) не считается клиентским", () => {
+    const p = parseMetaPayload({
+      object: "instagram",
+      entry: [{ id: "IG_ACC", messaging: [{ sender: { id: "IG_ACC" }, recipient: { id: "U1" }, message: { mid: "m1", text: "ответ менеджера" } }, { sender: { id: "U1" }, recipient: { id: "IG_ACC" }, message: { mid: "m2", text: "вопрос клиента" } }] }],
+    });
+    expect(p.messages).toEqual([{ mid: "m2", senderId: "U1", text: "вопрос клиента", isEcho: false }]);
   });
 
   it("мусор не ломает разбор", () => {
@@ -101,5 +125,39 @@ describe("Graph API", () => {
 
     jest.spyOn(globalThis, "fetch").mockResolvedValue(jsonRes(403, { error: "window closed" }));
     await expect(sendInstagramText("U1", "Привет", noSleep)).rejects.toThrow(/403/);
+  });
+
+  it("Instagram Login: graph.instagram.com, токен в заголовке Authorization, а не в адресе", async () => {
+    process.env.INSTAGRAM_ACCESS_TOKEN = "IGAA_TOKEN";
+    resetConfigCache();
+    const spy = jest.spyOn(globalThis, "fetch").mockResolvedValue(jsonRes(200, {}));
+    await sendInstagramText("U1", "Привет", noSleep);
+    const [url, init] = spy.mock.calls[0];
+    expect(String(url)).toBe("https://graph.instagram.com/v23.0/me/messages");
+    expect(String(url)).not.toContain("IGAA_TOKEN");
+    expect((init as RequestInit).headers).toMatchObject({ Authorization: "Bearer IGAA_TOKEN" });
+    expect(JSON.parse(String((init as RequestInit).body))).toEqual({ recipient: { id: "U1" }, message: { text: "Привет" } });
+  });
+
+  it("Instagram Login: INSTAGRAM_USER_ID заменяет «me»; токен Instagram приоритетнее токена страницы", async () => {
+    Object.assign(process.env, { INSTAGRAM_ACCESS_TOKEN: "IGAA_TOKEN", INSTAGRAM_USER_ID: "1784" });
+    resetConfigCache();
+    const spy = jest.spyOn(globalThis, "fetch").mockResolvedValue(jsonRes(200, {}));
+    await sendInstagramText("U1", "Привет", noSleep);
+    expect(String(spy.mock.calls[0][0])).toBe("https://graph.instagram.com/v23.0/1784/messages");
+  });
+
+  it("без каких-либо токенов — понятная ошибка, запрос не отправляется", async () => {
+    delete process.env.META_PAGE_ACCESS_TOKEN;
+    resetConfigCache();
+    const spy = jest.spyOn(globalThis, "fetch");
+    await expect(sendInstagramText("U1", "Привет", noSleep)).rejects.toThrow(/INSTAGRAM_ACCESS_TOKEN/);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("лид-формы без токена страницы: понятная ошибка вместо запроса с пустым токеном", async () => {
+    delete process.env.META_PAGE_ACCESS_TOKEN;
+    resetConfigCache();
+    await expect(fetchLeadgen("1", noSleep)).rejects.toThrow(/META_PAGE_ACCESS_TOKEN/);
   });
 });

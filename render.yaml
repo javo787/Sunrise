@@ -36,6 +36,8 @@ services:
       - { key: EVOLUTION_API_KEY, sync: false }
       - { key: EVOLUTION_INSTANCE, sync: false }
       - { key: WHATSAPP_WEBHOOK_SECRET, sync: false }
+      - { key: INSTAGRAM_ACCESS_TOKEN, sync: false }
+      - { key: INSTAGRAM_APP_SECRET, sync: false }
       - { key: META_APP_SECRET, sync: false }
       - { key: META_VERIFY_TOKEN, sync: false }
       - { key: META_PAGE_ACCESS_TOKEN, sync: false }

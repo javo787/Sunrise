@@ -188,6 +188,20 @@ Evolution API сам по себе бесплатный, но ему нужны 
 2. **Параллельно:** developers.facebook.com → создайте приложение (тип Business) → добавьте продукт **Webhooks** и сценарий «Capture & manage ad leads» → подайте App Review и Business Verification.
 3. **После одобрения:** в Render заполните `META_APP_SECRET` (Настройки приложения → Основное), `META_VERIFY_TOKEN` (ваша строка), `META_PAGE_ACCESS_TOKEN` (токен страницы с `leads_retrieval`, `pages_show_list`, `pages_manage_metadata`, `pages_manage_ads`). В Webhooks: объект **Page**, адрес `https://<АДРЕС>/api/meta-webhook`, токен подтверждения = `META_VERIFY_TOKEN`, подписка на поле **leadgen**. Подпишите страницу на приложение: `POST https://graph.facebook.com/v23.0/<PAGE_ID>/subscribed_apps?subscribed_fields=leadgen&access_token=<PAGE_TOKEN>`. В Business Settings → Integrations → Leads Access назначьте приложение как CRM для страницы.
 
+### Instagram Direct через Instagram Login (рекомендуемый путь, страница Facebook не нужна)
+
+Подходит, если нужны только сообщения Instagram. Лид-формы (`leadgen`) работают по схеме выше и могут быть подключены параллельно.
+
+1. В Instagram (аккаунт Business/Creator): Настройки → Сообщения → Управление сообщениями → Подключённые инструменты → **Разрешить доступ к сообщениям** (Settings → Messages and story replies → Message controls → Connected tools → Allow access to messages).
+2. developers.facebook.com → приложение → **Instagram → API setup with Instagram login**.
+3. **Generate access tokens** → добавьте аккаунт, войдите в Instagram, нажмите Generate token и включите переключатель **Webhook subscription**. Токен начинается с `IGAA…` → это `INSTAGRAM_ACCESS_TOKEN`. Он живёт 60 дней: CRM сама продлевает его раз в неделю (cron `retry-failed`) и хранит продлённый токен в MongoDB (коллекция `credentials`).
+4. В блоке над шагом 1 возьмите **Instagram app secret** → `INSTAGRAM_APP_SECRET`. Это не тот секрет, что в App settings → Basic; CRM принимает вебхуки, подписанные любым из двух (`INSTAGRAM_APP_SECRET`, `META_APP_SECRET`).
+5. `META_VERIFY_TOKEN` — ваша строка. Все переменные внесите в Render и дождитесь деплоя (`/api/health` → `"instagram": true`).
+6. **Configure webhooks**: Callback URL `https://<АДРЕС>/api/meta-webhook`, Verify token = `META_VERIFY_TOKEN`, Verify and save, подписка на поле **`messages`**.
+7. Проверка: напишите в Direct с аккаунта, у которого есть роль в приложении (admin/developer/tester). Для обычных клиентов приложению нужны App Review (`instagram_business_manage_messages`) и Business Verification.
+
+Если токен не удалось продлить, в логах Render появится ошибка «не удалось продлить токен Instagram»: сгенерируйте новый токен и замените `INSTAGRAM_ACCESS_TOKEN` — отсчёт начнётся заново автоматически. Если ответы не уходят, задайте `INSTAGRAM_USER_ID` (id аккаунта: `GET https://graph.instagram.com/me?fields=user_id&access_token=<токен>`).
+
 ## Шаг 12. Первый тест
 
 1. `/api/health` → `ok: true`.
