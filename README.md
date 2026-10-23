@@ -45,7 +45,7 @@ npm test                        # 279 тестов
    `/addmanager 123456789 Менеджер 1 Алиса Каримова` (листы «Менеджер 1–3», один лист — один человек).
    Остальное: `/managers`, `/removemanager <id>`, `/report day|month`.
 4. **WhatsApp (Evolution API)**: в инстансе включить вебхук на `https://домен/api/whatsapp-webhook?secret=<WHATSAPP_WEBHOOK_SECRET>`, событие `MESSAGES_UPSERT`.
-5. **Meta**: приложение с продуктом Webhooks, подписка страницы на поле `leadgen` (объект *Page*) и на сообщения Instagram. Callback URL `https://домен/api/meta-webhook`, verify token = `META_VERIFY_TOKEN`. Токен страницы должен иметь `leads_retrieval`, `pages_show_list`, `pages_manage_metadata`, `instagram_manage_messages`.
+5. **Meta**: приложение с продуктом Webhooks, подписка страницы на поле `leadgen` (объект *Page*) и на сообщения Instagram. Callback URL `https://домен/api/meta-webhook`, verify token = `META_VERIFY_TOKEN`. Токен страницы должен иметь `leads_retrieval`, `pages_show_list`, `pages_manage_metadata`, `instagram_manage_messages`. Для одного только Instagram Direct проще Instagram Login: `INSTAGRAM_ACCESS_TOKEN` + `INSTAGRAM_APP_SECRET`, подписка на `messages`, страница Facebook не нужна, токен CRM продлевает сама (см. DEPLOY.md, шаг 11).
 6. **Google Sheets**: сервисный аккаунт → ключ JSON в `GOOGLE_SERVICE_ACCOUNT_JSON`, таблицу расшарить на e-mail аккаунта с правом «Редактор», ID таблицы → `SHEETS_SPREADSHEET_ID`.
    **Проверка таблицы перед запуском** (ничего не записывает):
    `curl -H "x-cron-secret: $CRON_SECRET" https://домен/api/cron/sheets-check` — покажет по каждому листу найденные колонки, заголовки, которые код не трогает (формулы), первую свободную строку, и значения справочников из кода, которых нет на листе `_Lists`.

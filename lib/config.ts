@@ -62,15 +62,31 @@ export const telegramConfig = () =>
     })
   );
 
+// Meta: два независимых способа подключить Instagram Direct, их можно использовать вместе.
+//  • Instagram Login (рекомендуется): страница Facebook не нужна. INSTAGRAM_ACCESS_TOKEN (токен «IGAA…»)
+//    и INSTAGRAM_APP_SECRET («Instagram app secret» из Meta for Developers).
+//  • Facebook Login: META_PAGE_ACCESS_TOKEN (токен страницы «EAA…») и META_APP_SECRET
+//    (App settings → Basic). Токен страницы нужен и для лид-форм (leadgen).
+// Вебхук подписывается секретом того приложения, к которому относится событие, поэтому принимаем любой из двух.
 export const metaConfig = () =>
   section(
     "meta",
-    z.object({
-      META_APP_SECRET: str(),
-      META_VERIFY_TOKEN: str(),
-      META_PAGE_ACCESS_TOKEN: str(),
-      META_GRAPH_VERSION: z.preprocess(emptyToUndefined, z.string().regex(/^v\d+\.\d+$/).default("v23.0")),
-    })
+    z
+      .object({
+        META_VERIFY_TOKEN: str(),
+        META_APP_SECRET: optStr(),
+        INSTAGRAM_APP_SECRET: optStr(),
+        META_PAGE_ACCESS_TOKEN: optStr(),
+        INSTAGRAM_ACCESS_TOKEN: optStr(),
+        // необязательно: id профессионального аккаунта Instagram, если отправка через «me» не работает
+        INSTAGRAM_USER_ID: optStr(),
+        META_GRAPH_VERSION: z.preprocess(emptyToUndefined, z.string().regex(/^v\d+\.\d+$/).default("v23.0")),
+      })
+      .superRefine((v, ctx) => {
+        if (!v.META_APP_SECRET && !v.INSTAGRAM_APP_SECRET) {
+          ctx.addIssue({ code: "custom", path: ["META_APP_SECRET"], message: "нужен META_APP_SECRET или INSTAGRAM_APP_SECRET (подпись вебхуков)" });
+        }
+      })
   );
 
 export const llmConfig = () =>

@@ -20,7 +20,9 @@ export async function POST(req: Request) {
   const log = createLogger("meta-webhook", newRequestId());
   const raw = await req.text();
 
-  if (!verifyMetaSignature(raw, req.headers.get("x-hub-signature-256"), metaConfig().META_APP_SECRET)) {
+  const cfg = metaConfig();
+  const secrets = [cfg.META_APP_SECRET, cfg.INSTAGRAM_APP_SECRET].filter((s): s is string => Boolean(s));
+  if (!verifyMetaSignature(raw, req.headers.get("x-hub-signature-256"), secrets)) {
     log.warn("вебхук Meta отклонён: неверная подпись");
     return new NextResponse("invalid signature", { status: 403 });
   }

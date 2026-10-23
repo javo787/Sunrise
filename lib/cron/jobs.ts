@@ -1,4 +1,4 @@
-import { coreConfig, isConfigured, sheetsConfig } from "@/lib/config";
+import { coreConfig, isConfigured, metaConfig, sheetsConfig } from "@/lib/config";
 import { isLastDayOfMonth } from "@/lib/domain/time";
 import { getMetaIntakeDeps, getPipelineDeps, getReportDeps, getSalesBotDeps } from "@/lib/runtime";
 import { recoverStaleInbox } from "@/lib/services/inbox";
@@ -6,6 +6,7 @@ import { handleInboundBatch } from "@/lib/services/sales-bot";
 import { escalateStaleLeads, publishPendingLeads } from "@/lib/services/lead-pipeline";
 import { retryFailedLeadgens } from "@/lib/services/meta-intake";
 import { sendReport } from "@/lib/services/reports";
+import { refreshInstagramTokenIfDue } from "@/lib/integrations/instagram-token";
 import { getSheetsApi, parseColumnOverrides } from "@/lib/integrations/sheets";
 import { checkSpreadsheet } from "@/lib/services/sheet-check";
 import { retryPendingSheetSyncs } from "@/lib/services/sheet-sync";
@@ -23,12 +24,14 @@ export const JOBS = {
     const escalated = await escalateStaleLeads(deps);
     return { published, escalated };
   },
-  /** каждые 5 минут: повторная запись в таблицу, повтор лид-форм Meta и сообщений клиентов, потерянных при перезапуске */
+  /** каждые 5 минут: повторная запись в таблицу, повтор лид-форм Meta и сообщений клиентов, потерянных при перезапуске; продление токена Instagram */
   "retry-failed": async () => {
     const sheets = isConfigured(sheetsConfig) ? await retryPendingSheetSyncs() : "sheets_not_configured";
     const meta = await retryFailedLeadgens(getMetaIntakeDeps());
     const inbox = await recoverStaleInbox((batch) => handleInboundBatch(getSalesBotDeps(), batch));
-    return { sheets, meta, inbox };
+    // продление 60-дневного токена Instagram Login (раз в неделю, остальное время — одно чтение из БД)
+    const instagramToken = isConfigured(metaConfig) ? await refreshInstagramTokenIfDue().catch(() => "error" as const) : "meta_not_configured";
+    return { sheets, meta, inbox, instagramToken };
   },
   /** вручную: сверка заголовков листов менеджеров и справочника _Lists с кодом (ничего не записывает) */
   "sheets-check": async () => {

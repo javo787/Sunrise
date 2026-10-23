@@ -3,17 +3,25 @@ import { metaConfig } from "@/lib/config";
 import type { LeadSource } from "@/lib/domain/catalog";
 import { createLogger } from "@/lib/logger";
 import { fetchWithRetry, type RetryOptions } from "./http";
+import { getInstagramToken } from "./instagram-token";
 
 const log = createLogger("meta");
 
 // ---------------------------------------------------------------- безопасность вебхука
 
-/** Проверка X-Hub-Signature-256: HMAC-SHA256 от СЫРОГО тела запроса с секретом приложения. */
-export function verifyMetaSignature(rawBody: string, header: string | null | undefined, appSecret: string): boolean {
+/**
+ * Проверка X-Hub-Signature-256: HMAC-SHA256 от СЫРОГО тела запроса с секретом приложения.
+ * Можно передать несколько секретов (основное приложение Meta и приложение Instagram) — подходит любой.
+ */
+export function verifyMetaSignature(rawBody: string, header: string | null | undefined, appSecrets: string | readonly string[]): boolean {
   if (!header || !header.startsWith("sha256=")) return false;
-  const expected = Buffer.from(createHmac("sha256", appSecret).update(rawBody).digest("hex"), "utf8");
   const given = Buffer.from(header.slice("sha256=".length), "utf8");
-  return expected.length === given.length && timingSafeEqual(expected, given);
+  return (typeof appSecrets === "string" ? [appSecrets] : appSecrets)
+    .filter((secret) => secret.length > 0)
+    .some((secret) => {
+      const expected = Buffer.from(createHmac("sha256", secret).update(rawBody).digest("hex"), "utf8");
+      return expected.length === given.length && timingSafeEqual(expected, given);
+    });
 }
 
 /** GET-рукопожатие при подписке на вебхук: возвращает hub.challenge или null. */
@@ -59,11 +67,13 @@ export function parseMetaPayload(body: unknown): ParsedMetaPayload {
       if (leadgenId) out.leadgens.push({ leadgenId, pageId: asString(change.value.page_id), formId: asString(change.value.form_id) });
     }
 
+    const accountId = asString(entry.id);
     for (const m of Array.isArray(entry.messaging) ? entry.messaging : []) {
       if (!isObj(m) || !isObj(m.message) || !isObj(m.sender)) continue;
       const mid = asString(m.message.mid);
       const senderId = asString(m.sender.id);
       if (!mid || !senderId) continue;
+      if (accountId && senderId === accountId) continue; // сообщение от самого аккаунта (ответ менеджера из приложения) — не клиент
       out.messages.push({ mid, senderId, text: typeof m.message.text === "string" ? m.message.text : undefined, isEcho: m.message.is_echo === true });
     }
   }
@@ -80,6 +90,7 @@ export interface MetaLead {
 
 function graphUrl(path: string, params: Record<string, string> = {}): string {
   const cfg = metaConfig();
+  if (!cfg.META_PAGE_ACCESS_TOKEN) throw new Error("META_PAGE_ACCESS_TOKEN не задан (токен страницы Facebook нужен для лид-форм)");
   const qs = new URLSearchParams({ ...params, access_token: cfg.META_PAGE_ACCESS_TOKEN });
   return `https://graph.facebook.com/${cfg.META_GRAPH_VERSION}/${path}?${qs.toString()}`;
 }
@@ -131,15 +142,28 @@ export function mapLeadFields(lead: MetaLead): MappedMetaLead {
   };
 }
 
-/** Ответ клиенту в Instagram Direct (окно ответа Meta — 24 часа после его последнего сообщения). */
+/**
+ * Ответ клиенту в Instagram Direct (окно ответа Meta — 24 часа после его последнего сообщения).
+ * Instagram Login (INSTAGRAM_ACCESS_TOKEN) → graph.instagram.com; иначе Facebook Login (токен страницы) → graph.facebook.com.
+ */
 export async function sendInstagramText(recipientId: string, text: string, retry: RetryOptions = {}): Promise<void> {
+  const cfg = metaConfig();
+  const igToken = await getInstagramToken();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  let url: string;
+
+  if (igToken) {
+    url = `https://graph.instagram.com/${cfg.META_GRAPH_VERSION}/${encodeURIComponent(cfg.INSTAGRAM_USER_ID ?? "me")}/messages`;
+    headers.Authorization = `Bearer ${igToken}`;
+  } else if (cfg.META_PAGE_ACCESS_TOKEN) {
+    url = graphUrl("me/messages");
+  } else {
+    throw new Error("Instagram не настроен: задайте INSTAGRAM_ACCESS_TOKEN (Instagram Login) или META_PAGE_ACCESS_TOKEN (Facebook Login)");
+  }
+
   const res = await fetchWithRetry(
-    graphUrl("me/messages"),
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ recipient: { id: recipientId }, message: { text: text.slice(0, 1000) } }),
-    },
+    url,
+    { method: "POST", headers, body: JSON.stringify({ recipient: { id: recipientId }, message: { text: text.slice(0, 1000) } }) },
     { timeoutMs: 10_000, attempts: 3, ...retry }
   );
   if (!res.ok) {

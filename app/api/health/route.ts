@@ -19,6 +19,8 @@ export async function GET() {
     core: isConfigured(coreConfig),
     telegram: isConfigured(telegramConfig),
     meta: isConfigured(metaConfig),
+    // токен для ответов в Instagram Direct (Instagram Login или токен страницы)
+    instagram: isConfigured(metaConfig) && Boolean(process.env.INSTAGRAM_ACCESS_TOKEN?.trim() || process.env.META_PAGE_ACCESS_TOKEN?.trim()),
     llm: isConfigured(llmConfig),
     sheets: isConfigured(sheetsConfig),
     mail: isConfigured(mailConfig),
